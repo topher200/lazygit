@@ -48,7 +48,7 @@ func (gui *Gui) nodesRenderToMain() error {
 		return gui.refreshMainViews(refreshMainOpts{
 			main: &viewUpdateOpts{
 				title: "",
-				task:  NewRenderStringTask(gui.Tr.NoChangednodes),
+				task:  NewRenderStringTask(gui.c.Tr.NoChangednodes),
 			},
 		})
 	}
@@ -60,7 +60,7 @@ func (gui *Gui) nodesRenderToMain() error {
 	cmdObj := gui.Git.WorkingTree.WorktreeFileDiffCmdObj(node, false, !node.GetHasUnstagedChanges() && node.GetHasStagedChanges(), gui.State.IgnoreWhitespaceInDiffView)
 
 	refreshOpts := refreshMainOpts{main: &viewUpdateOpts{
-		title: gui.Tr.UnstagedChanges,
+		title: gui.c.Tr.UnstagedChanges,
 		task:  NewRunPtyTask(cmdObj.GetCmd()),
 	}}
 
@@ -69,12 +69,12 @@ func (gui *Gui) nodesRenderToMain() error {
 			cmdObj := gui.Git.WorkingTree.WorktreeFileDiffCmdObj(node, false, true, gui.State.IgnoreWhitespaceInDiffView)
 
 			refreshOpts.secondary = &viewUpdateOpts{
-				title: gui.Tr.StagedChanges,
+				title: gui.c.Tr.StagedChanges,
 				task:  NewRunPtyTask(cmdObj.GetCmd()),
 			}
 		}
 	} else {
-		refreshOpts.main.title = gui.Tr.StagedChanges
+		refreshOpts.main.title = gui.c.Tr.StagedChanges
 	}
 
 	return gui.refreshMainViews(refreshOpts)
@@ -185,10 +185,10 @@ func (gui *Gui) enterFile(opts OnFocusOpts) error {
 		return gui.switchToMerge()
 	}
 	if file.HasMergeConflicts {
-		return gui.createErrorPanel(gui.Tr.FileStagingRequirements)
+		return gui.createErrorPanel(gui.c.Tr.FileStagingRequirements)
 	}
 
-	return gui.pushContext(gui.State.Contexts.Staging, opts)
+	return gui.c.PushContext(gui.State.Contexts.Staging, opts)
 }
 
 func (gui *Gui) handleFilePress() error {
@@ -205,29 +205,29 @@ func (gui *Gui) handleFilePress() error {
 		}
 
 		if node.HasUnstagedChanges {
-			gui.logAction(gui.Tr.Actions.Stagenode)
+			gui.c.LogAction(gui.c.Tr.Actions.Stagenode)
 			if err := gui.Git.WorkingTree.Stagenode(node.Name); err != nil {
 				return gui.surfaceError(err)
 			}
 		} else {
-			gui.logAction(gui.Tr.Actions.Unstagenode)
+			gui.c.LogAction(gui.c.Tr.Actions.Unstagenode)
 			if err := gui.Git.WorkingTree.UnStagenode(node.Names(), node.Tracked); err != nil {
 				return gui.surfaceError(err)
 			}
 		}
 	} else {
 		if node.GetHasInlineMergeConflicts() {
-			return gui.createErrorPanel(gui.Tr.ErrStageDirWithInlineMergeConflicts)
+			return gui.createErrorPanel(gui.c.Tr.ErrStageDirWithInlineMergeConflicts)
 		}
 
 		if node.GetHasUnstagedChanges() {
-			gui.logAction(gui.Tr.Actions.Stagenode)
+			gui.c.LogAction(gui.c.Tr.Actions.Stagenode)
 			if err := gui.Git.WorkingTree.Stagenode(node.Path); err != nil {
 				return gui.surfaceError(err)
 			}
 		} else {
 			// pretty sure it doesn't matter that we're always passing true here
-			gui.logAction(gui.Tr.Actions.Unstagenode)
+			gui.c.LogAction(gui.c.Tr.Actions.Unstagenode)
 			if err := gui.Git.WorkingTree.UnStagenode([]string{node.Path}, true); err != nil {
 				return gui.surfaceError(err)
 			}
@@ -258,10 +258,10 @@ func (gui *Gui) onFocusnode() error {
 func (gui *Gui) handleStageAll() error {
 	var err error
 	if gui.allnodesStaged() {
-		gui.logAction(gui.Tr.Actions.UnstageAllnodes)
+		gui.c.LogAction(gui.c.Tr.Actions.UnstageAllnodes)
 		err = gui.Git.WorkingTree.UnstageAll()
 	} else {
-		gui.logAction(gui.Tr.Actions.StageAllnodes)
+		gui.c.LogAction(gui.c.Tr.Actions.StageAllnodes)
 		err = gui.Git.WorkingTree.StageAll()
 	}
 	if err != nil {

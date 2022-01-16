@@ -6,7 +6,7 @@ func (gui *Gui) createMenu(title string, items []*menuItem, createMenuOptions cr
 	if createMenuOptions.showCancel {
 		// this is mutative but I'm okay with that for now
 		items = app(items, &menuItem{
-			d: []string{gui.Tr.LcCancel},
+			d: []string{gui.c.Tr.LcCancel},
 			onPress: func() error {
 				return nil
 			},
