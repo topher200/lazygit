@@ -328,8 +328,10 @@ func (gui *Gui) onFocusFile() error {
 	return nil
 }
 
-func (gui *Gui) getSetTextareaTextFn(view *gocui.View) func(string) {
+func (gui *Gui) getSetTextareaTextFn(getView func() *gocui.View) func(string) {
 	return func(text string) {
+		// using a getView function so that we don't need to worry about when the view is created
+		view := getView()
 		view.ClearTextArea()
 		view.TextArea.TypeString(text)
 		view.RenderTextArea()

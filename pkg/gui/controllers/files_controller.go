@@ -22,14 +22,14 @@ type FilesController struct {
 	// case I would actually prefer a _zero_ letter variable name in the form of
 	// struct embedding, but Go does not allow hiding public fields in an embedded struct
 	// to the client
-	c       *ControllerCommon
-	context types.IListContext
-	git     *commands.GitCommand
-	os      *oscommands.OSCommand
+	c          *ControllerCommon
+	getContext func() types.IListContext
+	git        *commands.GitCommand
+	os         *oscommands.OSCommand
 
 	getSelectedFileNode    func() *filetree.FileNode
-	allContexts            context.ContextTree
-	fileTreeViewModel      *filetree.FileTreeViewModel
+	getContexts            func() context.ContextTree
+	getViewModel           func() *filetree.FileTreeViewModel
 	enterSubmodule         func(submodule *models.SubmoduleConfig) error
 	getSubmodules          func() []*models.SubmoduleConfig
 	setCommitMessage       func(message string)
@@ -48,12 +48,12 @@ var _ types.IController = &FilesController{}
 
 func NewFilesController(
 	c *ControllerCommon,
-	context types.IListContext,
+	getContext func() types.IListContext,
 	git *commands.GitCommand,
 	os *oscommands.OSCommand,
 	getSelectedFileNode func() *filetree.FileNode,
-	allContexts context.ContextTree,
-	fileTreeViewModel *filetree.FileTreeViewModel,
+	allContexts func() context.ContextTree,
+	getViewModel func() *filetree.FileTreeViewModel,
 	enterSubmodule func(submodule *models.SubmoduleConfig) error,
 	getSubmodules func() []*models.SubmoduleConfig,
 	setCommitMessage func(message string),
@@ -68,12 +68,12 @@ func NewFilesController(
 ) *FilesController {
 	return &FilesController{
 		c:                      c,
-		context:                context,
+		getContext:             getContext,
 		git:                    git,
 		os:                     os,
 		getSelectedFileNode:    getSelectedFileNode,
-		allContexts:            allContexts,
-		fileTreeViewModel:      fileTreeViewModel,
+		getContexts:            allContexts,
+		getViewModel:           getViewModel,
 		enterSubmodule:         enterSubmodule,
 		getSubmodules:          getSubmodules,
 		setCommitMessage:       setCommitMessage,
@@ -97,7 +97,7 @@ func (self *FilesController) Keybindings(getKey func(key string) interface{}, co
 		},
 		{
 			Key:     gocui.MouseLeft,
-			Handler: func() error { return self.context.HandleClick(self.checkSelectedFileNode(self.press)) },
+			Handler: func() error { return self.getContext().HandleClick(self.checkSelectedFileNode(self.press)) },
 		},
 		{
 			Key:         getKey("<c-b>"), // TODO: softcode
@@ -126,7 +126,7 @@ func (self *FilesController) Keybindings(getKey func(key string) interface{}, co
 		},
 		{
 			Key:         getKey(config.Universal.Edit),
-			Handler:     self.edit,
+			Handler:     self.checkSelectedFileNode(self.edit),
 			Description: self.c.Tr.LcEditFile,
 		},
 		{
@@ -136,7 +136,7 @@ func (self *FilesController) Keybindings(getKey func(key string) interface{}, co
 		},
 		{
 			Key:         getKey(config.Files.IgnoreFile),
-			Handler:     self.ignore,
+			Handler:     self.checkSelectedFileNode(self.ignore),
 			Description: self.c.Tr.LcIgnoreFile,
 		},
 		{
@@ -189,7 +189,7 @@ func (self *FilesController) Keybindings(getKey func(key string) interface{}, co
 		},
 	}
 
-	return append(bindings, self.context.Keybindings(getKey, config, guards)...)
+	return append(bindings, self.getContext().Keybindings(getKey, config, guards)...)
 }
 
 func (self *FilesController) press(node *filetree.FileNode) error {
@@ -197,7 +197,7 @@ func (self *FilesController) press(node *filetree.FileNode) error {
 		file := node.File
 
 		if file.HasInlineMergeConflicts {
-			return self.c.PushContext(self.allContexts.Merging)
+			return self.c.PushContext(self.getContexts().Merging)
 		}
 
 		if file.HasUnstagedChanges {
@@ -236,7 +236,7 @@ func (self *FilesController) press(node *filetree.FileNode) error {
 		return err
 	}
 
-	return self.context.HandleFocus()
+	return self.getContext().HandleFocus()
 }
 
 func (self *FilesController) checkSelectedFileNode(callback func(*filetree.FileNode) error) func() error {
@@ -262,7 +262,7 @@ func (self *FilesController) checkSelectedFile(callback func(*models.File) error
 }
 
 func (self *FilesController) Context() types.Context {
-	return self.context
+	return self.getContext()
 }
 
 func (self *FilesController) getSelectedFile() *models.File {
@@ -302,11 +302,11 @@ func (self *FilesController) EnterFile(opts types.OnFocusOpts) error {
 		return self.c.ErrorMsg(self.c.Tr.FileStagingRequirements)
 	}
 
-	return self.c.PushContext(self.allContexts.Staging, opts)
+	return self.c.PushContext(self.getContexts().Staging, opts)
 }
 
 func (self *FilesController) allFilesStaged() bool {
-	for _, file := range self.fileTreeViewModel.GetAllFiles() {
+	for _, file := range self.getViewModel().GetAllFiles() {
 		if file.HasUnstagedChanges {
 			return false
 		}
@@ -331,15 +331,10 @@ func (self *FilesController) stageAll() error {
 		return err
 	}
 
-	return self.allContexts.Files.HandleFocus()
+	return self.getContexts().Files.HandleFocus()
 }
 
-func (self *FilesController) ignore() error {
-	node := self.getSelectedFileNode()
-	if node == nil {
-		return nil
-	}
-
+func (self *FilesController) ignore(node *filetree.FileNode) error {
 	if node.GetPath() == ".gitignore" {
 		return self.c.ErrorMsg("Cannot ignore .gitignore")
 	}
@@ -441,7 +436,7 @@ func (self *FilesController) HandleCommitPress() error {
 		return self.c.Error(err)
 	}
 
-	if self.fileTreeViewModel.GetItemsLength() == 0 {
+	if self.getViewModel().GetItemsLength() == 0 {
 		return self.c.ErrorMsg(self.c.Tr.NoFilesStagedTitle)
 	}
 
@@ -466,7 +461,7 @@ func (self *FilesController) HandleCommitPress() error {
 		}
 	}
 
-	if err := self.c.PushContext(self.allContexts.CommitMessage); err != nil {
+	if err := self.c.PushContext(self.getContexts().CommitMessage); err != nil {
 		return err
 	}
 
@@ -492,7 +487,7 @@ func (self *FilesController) promptToStageAllAndRetry(retry func() error) error 
 }
 
 func (self *FilesController) handleAmendCommitPress() error {
-	if self.fileTreeViewModel.GetItemsLength() == 0 {
+	if self.getViewModel().GetItemsLength() == 0 {
 		return self.c.ErrorMsg(self.c.Tr.NoFilesStagedTitle)
 	}
 
@@ -518,7 +513,7 @@ func (self *FilesController) handleAmendCommitPress() error {
 // HandleCommitEditorPress - handle when the user wants to commit changes via
 // their editor rather than via the popup panel
 func (self *FilesController) HandleCommitEditorPress() error {
-	if self.fileTreeViewModel.GetItemsLength() == 0 {
+	if self.getViewModel().GetItemsLength() == 0 {
 		return self.c.ErrorMsg(self.c.Tr.NoFilesStagedTitle)
 	}
 
@@ -559,16 +554,11 @@ func (self *FilesController) handleStatusFilterPressed() error {
 }
 
 func (self *FilesController) setStatusFiltering(filter filetree.FileTreeDisplayFilter) error {
-	self.fileTreeViewModel.SetFilter(filter)
-	return self.c.PostRefreshUpdate(self.context)
+	self.getViewModel().SetFilter(filter)
+	return self.c.PostRefreshUpdate(self.getContext())
 }
 
-func (self *FilesController) edit() error {
-	node := self.getSelectedFileNode()
-	if node == nil {
-		return nil
-	}
-
+func (self *FilesController) edit(node *filetree.FileNode) error {
 	if node.File == nil {
 		return self.c.ErrorMsg(self.c.Tr.ErrCannotEditDirectory)
 	}
@@ -591,7 +581,7 @@ func (self *FilesController) switchToMerge() error {
 		return nil
 	}
 
-	return self.c.PushContext(self.allContexts.Merging)
+	return self.c.PushContext(self.getContexts().Merging)
 }
 
 func (self *FilesController) handleCustomCommand() error {
@@ -655,9 +645,9 @@ func (self *FilesController) handleToggleDirCollapsed() error {
 		return nil
 	}
 
-	self.fileTreeViewModel.ToggleCollapsed(node.GetPath())
+	self.getViewModel().ToggleCollapsed(node.GetPath())
 
-	if err := self.c.PostRefreshUpdate(self.allContexts.Files); err != nil {
+	if err := self.c.PostRefreshUpdate(self.getContexts().Files); err != nil {
 		self.c.Log.Error(err)
 	}
 
@@ -668,18 +658,18 @@ func (self *FilesController) toggleTreeView() error {
 	// get path of currently selected file
 	path := self.getSelectedPath()
 
-	self.fileTreeViewModel.ToggleShowTree()
+	self.getViewModel().ToggleShowTree()
 
 	// find that same node in the new format and move the cursor to it
 	if path != "" {
-		self.fileTreeViewModel.ExpandToPath(path)
-		index, found := self.fileTreeViewModel.GetIndexForPath(path)
+		self.getViewModel().ExpandToPath(path)
+		index, found := self.getViewModel().GetIndexForPath(path)
 		if found {
-			self.context.GetPanelState().SetSelectedLineIdx(index)
+			self.getContext().GetPanelState().SetSelectedLineIdx(index)
 		}
 	}
 
-	return self.c.PostRefreshUpdate(self.context)
+	return self.c.PostRefreshUpdate(self.getContext())
 }
 
 func (self *FilesController) OpenMergeTool() error {
