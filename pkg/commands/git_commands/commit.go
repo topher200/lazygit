@@ -53,10 +53,12 @@ func (self *CommitCommands) ResetToCommit(sha string, strength string, envVars [
 func (self *CommitCommands) CommitCmdObj(summary string, description string) oscommands.ICmdObj {
 	messageArgs := self.commitMessageArgs(summary, description)
 
-	skipHookPrefix := self.UserConfig.Git.SkipHookPrefix
+	// skipHookPrefix := self.UserConfig.Git.SkipHookPrefix
 
 	cmdArgs := NewGitCmd("commit").
-		ArgIf(skipHookPrefix != "" && strings.HasPrefix(summary, skipHookPrefix), "--no-verify").
+		// TOPHER OVERRIDE:
+		// ArgIf(skipHookPrefix != "" && strings.HasPrefix(summary, skipHookPrefix), "--no-verify").
+		Arg("--no-verify").
 		ArgIf(self.signoffFlag() != "", self.signoffFlag()).
 		Arg(messageArgs...).
 		ToArgv()
